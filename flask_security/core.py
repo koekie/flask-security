@@ -854,7 +854,7 @@ class Security(object):
             # N.B. as of jinja 2.9 '_' is always registered
             # http://jinja.pocoo.org/docs/2.10/extensions/#i18n-extension
             if "_" not in app.jinja_env.globals:
-                app.jinja_env.globals["_"] = state.i18n_domain.gettext
+                current_app.jinja_env.globals["_"] = state.i18n_domain.gettext
 
         @app.before_first_request
         def _csrf_init():
@@ -905,9 +905,9 @@ class Security(object):
             if csrf:
                 csrf.exempt("flask_security.views.logout")
             if csrf_cookie and csrf_cookie["key"]:
-                app.after_request(csrf_cookie_handler)
+                current_app.after_request(csrf_cookie_handler)
                 # Add configured header to WTF_CSRF_HEADERS
-                app.config["WTF_CSRF_HEADERS"].append(cv("CSRF_HEADER"))
+                current_app.config["WTF_CSRF_HEADERS"].append(cv("CSRF_HEADER"))
 
         app.extensions["security"] = state
 
@@ -923,26 +923,23 @@ class Security(object):
         if cv("TWO_FACTOR", app=app):
             if len(cv("TWO_FACTOR_ENABLED_METHODS", app=app)) < 1:
                 raise ValueError("Must configure some TWO_FACTOR_ENABLED_METHODS")
-            self._check_two_factor_modules(
-                "pyqrcode", "TWO_FACTOR", cv("TWO_FACTOR", app=app)
-            )
-            self._check_two_factor_modules(
-                "cryptography", "TWO_FACTOR_SECRET", "has been set"
-            )
+            self._check_modules("pyqrcode", "TWO_FACTOR", cv("TWO_FACTOR", app=app))
+            self._check_modules("cryptography", "TWO_FACTOR_SECRET", "has been set")
 
             if cv("TWO_FACTOR_SMS_SERVICE", app=app) == "Twilio":  # pragma: no cover
-                self._check_two_factor_modules(
+                self._check_modules(
                     "twilio",
                     "TWO_FACTOR_SMS_SERVICE",
                     cv("TWO_FACTOR_SMS_SERVICE", app=app),
                 )
             state.totp_factory(tf_setup(app))
 
+        if cv("USE_VERIFY_PASSWORD_CACHE", app=app):
+            self._check_modules("cachetools", "USE_VERIFY_PASSWORD_CACHE", True)
+
         return state
 
-    def _check_two_factor_modules(
-        self, module, config_name, config_value
-    ):  # pragma: no cover
+    def _check_modules(self, module, config_name, config_value):  # pragma: no cover
         PY3 = sys.version_info[0] == 3
         if PY3:
             from importlib.util import find_spec
